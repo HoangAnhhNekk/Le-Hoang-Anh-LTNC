@@ -1,0 +1,197 @@
+#include <SDL.h>
+#include <SDL_image.h>
+#include <iostream>
+#include <vector>
+#include <ctime>
+#include <cstdlib>
+
+const int WINDOW_WIDTH = 800;
+const int WINDOW_HEIGHT = 600;
+const int TILE_SIZE = 20;
+const int GRID_WIDTH = WINDOW_WIDTH / TILE_SIZE;
+const int GRID_HEIGHT = WINDOW_HEIGHT / TILE_SIZE;
+
+int score = 0;
+
+enum Direction { UP, DOWN, LEFT, RIGHT };
+
+struct Point {
+    int x, y;
+};
+
+class Snake {
+public:
+    Snake(SDL_Renderer* renderer) : renderer(renderer) {
+        segments.push_back({ GRID_WIDTH / 2, GRID_HEIGHT / 2 });
+        direction = RIGHT;
+        loadTextures();
+        placeFood();
+    }
+
+    ~Snake() {
+        SDL_DestroyTexture(headTexture);
+        SDL_DestroyTexture(bodyTexture);
+        SDL_DestroyTexture(foodTexture);
+    }
+
+    void handleEvent(SDL_Event& e) {
+        if (e.type == SDL_KEYDOWN) {
+            switch (e.key.keysym.sym) {
+            case SDLK_UP: if (direction != DOWN) direction = UP; break;
+            case SDLK_DOWN: if (direction != UP) direction = DOWN; break;
+            case SDLK_LEFT: if (direction != RIGHT) direction = LEFT; break;
+            case SDLK_RIGHT: if (direction != LEFT) direction = RIGHT; break;
+            }
+        }
+    }
+
+    void update() {
+        Point newHead = segments[0];
+
+        switch (direction) {
+        case UP: newHead.y--; break;
+        case DOWN: newHead.y++; break;
+        case LEFT: newHead.x--; break;
+        case RIGHT: newHead.x++; break;
+        }
+
+        // Check for wall collision
+        if (newHead.x < 0 || newHead.x >= GRID_WIDTH || newHead.y < 0 || newHead.y >= GRID_HEIGHT) {
+            isDead = true;
+            return;
+        }
+
+        // Check for self-collision
+        for (const auto& segment : segments) {
+            if (segment.x == newHead.x && segment.y == newHead.y) {
+                isDead = true;
+                return;
+            }
+        }
+
+        segments.insert(segments.begin(), newHead);
+
+        if (newHead.x == food.x && newHead.y == food.y) {
+            placeFood();
+        }
+        else {
+            segments.pop_back();
+        }
+    }
+
+    void render() {
+        for (size_t i = 0; i < segments.size(); i++) {
+            SDL_Rect rect = { segments[i].x * TILE_SIZE, segments[i].y * TILE_SIZE, TILE_SIZE, TILE_SIZE };
+            if (i == 0) {
+                SDL_RenderCopy(renderer, headTexture, nullptr, &rect);
+            }
+            else {
+                SDL_RenderCopy(renderer, bodyTexture, nullptr, &rect);
+            }
+        }
+
+        SDL_Rect rect = { food.x * TILE_SIZE, food.y * TILE_SIZE, TILE_SIZE, TILE_SIZE };
+        SDL_RenderCopy(renderer, foodTexture, nullptr, &rect);
+    }
+
+    bool isDead = false;
+
+private:
+    void loadTextures() {
+        headTexture = IMG_LoadTexture(renderer, "head1.png");
+        bodyTexture = IMG_LoadTexture(renderer, "body9.png");
+        foodTexture = IMG_LoadTexture(renderer, "food.png");
+
+        if (!headTexture || !bodyTexture || !foodTexture) {
+            std::cerr << "Failed to load textures: " << SDL_GetError() << std::endl;
+            exit(1);
+        }
+    }
+
+    void placeFood() {
+        food.x = rand() % GRID_WIDTH;
+        food.y = rand() % GRID_HEIGHT;
+
+        for (const auto& segment : segments) {
+            if (segment.x == food.x && segment.y == food.y) {
+                placeFood();
+                return;
+            }
+        }
+    }
+
+    std::vector<Point> segments;
+    Point food;
+    Direction direction;
+    SDL_Renderer* renderer;
+    SDL_Texture* headTexture = nullptr;
+    SDL_Texture* bodyTexture = nullptr;
+    SDL_Texture* foodTexture = nullptr;
+};
+
+int main(int argc, char* argv[]) {
+    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        std::cerr << "Could not initialize SDL: " << SDL_GetError() << std::endl;
+        return 1;
+    }
+
+    if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
+        std::cerr << "Could not initialize SDL_image: " << IMG_GetError() << std::endl;
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_Window* window = SDL_CreateWindow("Snake Game", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, WINDOW_WIDTH, WINDOW_HEIGHT, SDL_WINDOW_SHOWN);
+    if (!window) {
+        std::cerr << "Could not create window: " << SDL_GetError() << std::endl;
+        IMG_Quit();
+        SDL_Quit();
+        return 1;
+    }
+
+    SDL_Renderer* renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+    if (!renderer) {
+        std::cerr << "Could not create renderer: " << SDL_GetError() << std::endl;
+        SDL_DestroyWindow(window);
+        IMG_Quit();
+        SDL_Quit();
+        return 1;
+    }
+
+    srand(static_cast<unsigned int>(time(0)));
+
+    Snake snake(renderer);
+    bool quit = false;
+    SDL_Event e;
+
+    while (!quit) {
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_QUIT) {
+                quit = true;
+            }
+            snake.handleEvent(e);
+        }
+
+        snake.update();
+        if (snake.isDead) {
+            std::cout << "Game Over!" << std::endl;
+            quit = true;
+        }
+
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+        SDL_RenderClear(renderer);
+
+        snake.render();
+
+        SDL_RenderPresent(renderer);
+
+        SDL_Delay(100);
+    }
+
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    IMG_Quit();
+    SDL_Quit();
+
+    return 0;
+}

@@ -73,6 +73,7 @@ public:
 
         if (newHead.x == food.x && newHead.y == food.y) {
             placeFood();
+            score += 10;
         }
         else {
             segments.pop_back();
@@ -176,6 +177,7 @@ int main(int argc, char* argv[]) {
         snake.update();
         if (snake.isDead) {
             std::cout << "Game Over!" << std::endl;
+            std::cout << "Score: " << score << std::endl;
             quit = true;
         }
 
